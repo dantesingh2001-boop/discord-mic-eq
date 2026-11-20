@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Discord Mic EQ",
+  "version": "0.1.0",
+  "description": "Preamp boost + full parametric EQ + clip guard on your Discord microphone, in the browser.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://discord.com/*",
+    "https://*.discord.com/*"
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_title": "Mic EQ"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://discord.com/*", "https://*.discord.com/*", "http://localhost/*"],
+      "js": ["src/dsp.js", "src/inject.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": ["https://discord.com/*", "https://*.discord.com/*", "http://localhost/*"],
+      "js": ["src/bridge.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED"
+    }
+  ]
+}

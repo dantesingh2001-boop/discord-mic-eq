@@ -1,0 +1,19 @@
+{
+  "spec": 3,
+  "type": "plugin",
+  "id": "miceq.mobile",
+  "version": "1.0.0",
+  "display": {
+    "name": "MicEQ Mobile",
+    "description": "Filterless mic + native gain tiers for Discord mobile voice, with diagnostics for what your build exposes.",
+    "authors": [
+      {
+        "name": "atomic"
+      }
+    ]
+  },
+  "main": "index.js",
+  "extras": {
+    "bunny": {}
+  }
+}

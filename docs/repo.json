@@ -1,0 +1,9 @@
+{
+  "miceq.mobile": {
+    "version": "1.0.0"
+  },
+  "$meta": {
+    "name": "MicEQ Mobile",
+    "description": "Mic EQ for Discord mobile"
+  }
+}

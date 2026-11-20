@@ -1,0 +1,12 @@
+{
+  "name": "MicEQ Mobile",
+  "description": "Filterless mic + native gain tiers for Discord mobile voice, with diagnostics for what your build exposes.",
+  "authors": [
+    {
+      "name": "atomic",
+      "id": "0"
+    }
+  ],
+  "main": "index.js",
+  "hash": "d60cfbdbf472a255b66899ca51348ab4"
+}

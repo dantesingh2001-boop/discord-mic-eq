@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>panel</title>
+<style>body{margin:0;background:#2b2d31;padding:16px;width:420px;}</style></head>
+<body>
+<div id="root"></div>
+<script>
+  window.BdApi = {
+    Data: { load: function () { return null; }, save: function () {} },
+    DOM: {
+      addStyle: function (id, css) {
+        let s = document.getElementById(id + '-style');
+        if (!s) { s = document.createElement('style'); s.id = id + '-style'; document.head.appendChild(s); }
+        s.textContent = css;
+      },
+      removeStyle: function (id) {
+        const s = document.getElementById(id + '-style');
+        if (s) s.remove();
+      },
+    },
+    UI: { showToast: function () {} },
+    React: null,
+  };
+</script>
+<script src="../betterdiscord/MicEQ.plugin.js"></script>
+<script type="module">
+  import React from 'https://esm.sh/react@18.3.1';
+  import { createRoot } from 'https://esm.sh/react-dom@18.3.1/client';
+  window.BdApi.React = React;
+  try {
+    const plugin = new window.MicEQPlugin({ name: 'MicEQ' });
+    plugin.start();
+    const el = plugin.getSettingsPanel();
+    createRoot(document.getElementById('root')).render(el);
+    setTimeout(() => {
+      const bands = document.querySelectorAll('.miceq-band').length;
+      const canvas = document.querySelector('.miceq-panel canvas');
+      const painted = canvas ? canvas.toDataURL().length > 2000 : false;
+      document.title = bands === 6 && painted ? 'MEQ_PANEL_OK' : `MEQ_PANEL_FAIL bands=${bands} painted=${painted}`;
+    }, 900);
+  } catch (e) {
+    document.title = 'MEQ_PANEL_ERR ' + e.message;
+  }
+</script>
+</body>
+</html>

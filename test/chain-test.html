@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8" /><title>MEQ chain test</title></head>
+<body>
+<pre id="out">running…</pre>
+<script src="../extension/src/dsp.js"></script>
+<script>
+(async () => {
+  const MEQ = window.__MEQ;
+  const SR = 48000;
+  const RESULTS = [];
+  const IN_DB = 20 * Math.log10(0.25 / Math.SQRT2);
+
+  function rmsDb(d, from, to) {
+    let s = 0;
+    for (let i = from; i < to; i++) s += d[i] * d[i];
+    const rms = Math.sqrt(s / (to - from));
+    return rms <= 1e-12 ? -120 : 20 * Math.log10(rms);
+  }
+
+  async function render(settings, freq, amp = 0.25, dur = 1.0) {
+    const ctx = new OfflineAudioContext(1, Math.round(SR * dur), SR);
+    const osc = ctx.createOscillator();
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const g = ctx.createGain();
+    g.gain.value = amp;
+    const chain = MEQ.createChain(ctx, settings);
+    osc.connect(g);
+    g.connect(chain.input);
+    chain.output.connect(ctx.destination);
+    osc.start(0);
+    return ctx.startRendering();
+  }
+
+  async function gainAt(settings, freq) {
+    const buf = await render(settings, freq);
+    const d = buf.getChannelData(0);
+    return rmsDb(d, Math.round(SR * 0.4), Math.round(SR * 0.95)) - (20 * Math.log10(0.25 / Math.SQRT2));
+  }
+
+  function check(name, expected, measured, tol) {
+    const diff = measured - expected;
+    RESULTS.push({ name, expected: +expected.toFixed(3), measured: +measured.toFixed(3), diff: +diff.toFixed(3), pass: Math.abs(diff) <= tol });
+  }
+
+  const flat = (bands, extra) => Object.assign({
+    enabled: true, preampDb: 0, limiter: false, softClip: false, bands: bands || [],
+  }, extra || {});
+
+  // 1) every filter type: analytic response vs rendered audio
+  const cases = [
+    { type: 'peaking', freq: 1000, q: 1.0, gain: 6 },
+    { type: 'peaking', freq: 250, q: 2.5, gain: -9 },
+    { type: 'lowshelf', freq: 150, q: 0.7, gain: 6 },
+    { type: 'highshelf', freq: 6000, q: 0.7, gain: -6 },
+    { type: 'highpass', freq: 100, q: 0.7, gain: 0 },
+    { type: 'lowpass', freq: 8000, q: 0.7, gain: 0 },
+    { type: 'notch', freq: 400, q: 3.0, gain: 0 },
+  ];
+  for (const band of cases) {
+    const s = flat([band]);
+    for (const f of [60, 120, 250, 400, 1000, 2500, 6000, 12000]) {
+      if (band.type === 'highpass' && f < band.freq * 0.8) continue;
+      if (band.type === 'notch' && Math.abs(f - band.freq) < 40) continue;
+      const measured = await gainAt(s, f);
+      check(`${band.type} ${band.freq}Hz f=${f}`, MEQ.responseDb(s, f, SR), measured, 0.35);
+    }
+  }
+
+  // 2) preamp is exact
+  for (const db of [-12, -6, 0, 6, 12]) {
+    const s = flat([], { preampDb: db });
+    check(`preamp ${db}dB`, db, await gainAt(s, 1000), 0.05);
+  }
+
+  // 3) the shipped default preset, whole-chain
+  const preset = { enabled: true, preampDb: 6, limiter: false, softClip: false, bands: MEQ.DEFAULT_SETTINGS.bands };
+  for (const f of [100, 180, 420, 1000, 3000, 6500, 10000]) {
+    check(`preset f=${f}`, MEQ.responseDb(preset, f, SR), await gainAt(preset, f), 0.35);
+  }
+
+  // 4) bypass is unity
+  const off = { enabled: false, preampDb: 24, limiter: true, softClip: true, bands: MEQ.DEFAULT_SETTINGS.bands };
+  check('bypass is unity', 0, await gainAt(off, 1000), 0.02);
+
+  // 5b) boost tiers: hostile gain must saturate to full scale, never wrap or go non-finite
+  for (const tier of [1000, 5000, 10000]) {
+    const s = { enabled: true, preampDb: 0, boost: tier, limiter: true, softClip: true, bands: [] };
+    const buf = await render(s, 300, 0.02, 1.0);
+    const d = buf.getChannelData(0);
+    let peak = 0, sum = 0, n = 0, bad = 0;
+    for (let i = Math.round(SR * 0.4); i < d.length; i++) {
+      if (!Number.isFinite(d[i])) bad++;
+      peak = Math.max(peak, Math.abs(d[i]));
+      sum += d[i] * d[i]; n++;
+    }
+    const rmsDb = 20 * Math.log10(Math.sqrt(sum / n) || 1e-9);
+    RESULTS.push({ name: `boost ${tier}x peaks at full scale`, expected: '<=1.0', measured: +peak.toFixed(3), diff: 0, pass: peak <= 1.0 && peak > 0.85 });
+    RESULTS.push({ name: `boost ${tier}x is loud (rms)`, expected: '>-6 dBFS', measured: +rmsDb.toFixed(2), diff: 0, pass: rmsDb > -6 });
+    RESULTS.push({ name: `boost ${tier}x no non-finite samples`, expected: 0, measured: bad, diff: bad, pass: bad === 0 });
+  }
+
+  // 6) boost reported loudness matches the gain math
+  const loud = { enabled: true, preampDb: 6, boost: 1000, bands: [] };
+  RESULTS.push({ name: 'totalGainDb 6dB preamp + 1k', expected: 66, measured: +MEQ.totalGainDb(loud).toFixed(2), diff: +Math.abs(MEQ.totalGainDb(loud) - 66).toFixed(2), pass: Math.abs(MEQ.totalGainDb(loud) - 66) < 0.01 });
+
+
+  // 5b) plain clip guard: +24 dB preamp on a hot input must not exceed full scale
+  const hot = { enabled: true, preampDb: 24, limiter: true, softClip: true, bands: [] };
+  const hotBuf = await render(hot, 220, 0.9, 1.0);
+  const hd = hotBuf.getChannelData(0);
+  let peak = 0, nonFinite = 0;
+  for (let i = Math.round(SR * 0.4); i < hd.length; i++) {
+    if (!Number.isFinite(hd[i])) nonFinite++;
+    peak = Math.max(peak, Math.abs(hd[i]));
+  }
+  RESULTS.push({ name: 'clip guard ceiling (peak)', expected: 1.0, measured: +peak.toFixed(3), diff: +peak.toFixed(3), pass: peak <= 1.0 && peak > 0.3 });
+  RESULTS.push({ name: 'no non-finite samples', expected: 0, measured: nonFinite, diff: nonFinite, pass: nonFinite === 0 });
+
+  const failed = RESULTS.filter((r) => !r.pass);
+  const summary = {
+    total: RESULTS.length,
+    passed: RESULTS.length - failed.length,
+    failed: failed.length,
+    failures: failed,
+  };
+  document.getElementById('out').textContent = JSON.stringify({ summary, results: RESULTS }, null, 1);
+  document.title = failed.length === 0 ? 'MEQ_PASS' : 'MEQ_FAIL';
+  window.__RESULTS = RESULTS;
+})().catch((e) => {
+  document.getElementById('out').textContent = 'ERROR: ' + (e && e.stack || e);
+  document.title = 'MEQ_ERROR';
+});
+</script>
+</body>
+</html>
