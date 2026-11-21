@@ -53,6 +53,39 @@ playback and are not a reliable mic path.
 
 ---
 
+## Measured in Roblox Studio, not assumed
+
+Ran against Studio 2026 `Place1` (Play Solo) with `VoiceChatService.UseAudioApi = Enabled`:
+
+| Check | Result |
+|---|---|
+| `Instance.new` for EQ / Fader / Limiter / Distortion / Compressor / Analyzer / DeviceInput / DeviceOutput / Wire | all creatable |
+| `AudioEqualizer.LowGain` | clamps at `-80 .. 10` (setting `99` gives `10`) |
+| `AudioEqualizer.MidRange` lower crossover | **clamps to `>= 200 Hz`** — `NumberRange.new(120, 400)` becomes `200 .. 400`, so the SUB band is a sub-200 Hz shelf, not a 60 Hz bell. Crossovers are now written as `200/400` explicitly and the graph's SUB point sits at 100 Hz |
+| `AudioFader.Volume` | clamps `0 .. 10` (`-5` becomes `0`), so +20 dB per fader is the hard ceiling |
+| `AudioDistortion.Level` | clamps `0 .. 1` |
+| `AudioLimiter` | `MaxLevel -12..0`, `Release 0.001..1` accepted |
+| `AudioAnalyzer` | pins are `Input` only, **no output pin** — it is a tap, which is how the script wires it |
+| `AudioDeviceOutput` | `Volume` **does not exist** (script never touches it); `Input` pin only |
+| Full 11-wire chain `mic -> EQ x3 -> Fader x4 -> Distortion -> Compressor -> Limiter -> Output` | engine accepted every wire; `GetConnectedWires` agrees |
+| Live build in Play Solo | folder with 3 EQ + 4 faders + limiter + distortion + compressor + analyzer + output, `Fader1.Volume = 1.9953` (+6 dB preset), 11 wires, `MonitorOut` wired 1/1 |
+| Panel geometry (measured, not eyeballed) | main `384x548` at `344,36`, right edge 728 of 1072, all 9 rows inside the frame, 9 band columns `36 px` wide spanning `354..710`, **0 clipped labels**, status text needs `334x72` in a `352x78` box |
+| `VoiceChatService.UseAudioApi` read from a LocalScript | **fails** (Studio/plugin identity only) — the panel now says so instead of printing a fake `unknown` |
+| `screen.Parent = CoreGui` from a LocalScript | **fails** — the panel falls back to `PlayerGui`, so it works in a real client as well as in an executor |
+
+### What Studio could not prove
+
+* **No audible output.** Play Solo never initializes voice chat: no core-created
+  `AudioDeviceInput` appears under `LocalPlayer`, `Active` stays `false`, `AudioAnalyzer.RmsLevel`
+  stays `0`. The panel reports exactly that instead of pretending. Testing the monitor needs a
+  real client with a verified, voice-eligible account in a voice-enabled experience.
+* **Transmit EQ.** Engine-side, unchanged by any tooling.
+
+Place `Place1` still contains `StarterPlayerScripts.RobloxEQ` (the exact hosted file) so you can
+press Play and see the panel yourself; delete that LocalScript when you are done.
+
+---
+
 ## Why a script cannot EQ your Roblox voice chat
 
 Roblox captures and encodes voice in the native engine (RbxAudio → Opus), one device at a
@@ -79,7 +112,7 @@ It builds a real graph out of real engine nodes and plays it to your own output 
 
 ```
 AudioDeviceInput
-  -> AudioEqualizer x3   (crossovers 120/400, 900/2600, 5500/11000 Hz)
+  -> AudioEqualizer x3   (crossovers 200/400, 900/2600, 5500/11000 Hz)
   -> AudioFader x4       (each caps at +20 dB, so 4 = +80 dB total)
   -> AudioDistortion     (soft clip, only when amount > 0)
   -> AudioCompressor     (threshold -12 dB)

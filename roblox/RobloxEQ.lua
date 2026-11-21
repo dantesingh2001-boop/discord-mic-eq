@@ -53,16 +53,18 @@ local BRIDGE_URL = "http://127.0.0.1:7331/eq"
 -- like a serial shelving EQ. One slider per property keeps it predictable.
 --------------------------------------------------------------------------------
 
+-- The engine clamps the low crossover to >= 200 Hz, so 200 is written explicitly
+-- rather than being silently raised from 120.
 local CROSSOVERS = {
-	{ 120, 400 },
+	{ 200, 400 },
 	{ 900, 2600 },
 	{ 5500, 11000 },
 }
 
 -- id, label, eq node (1-3), property, center frequency for the curve
 local BANDS = {
-	{ id = "sub",        label = "SUB",   node = 1, prop = "LowGain",  freq = 60 },
-	{ id = "bass",       label = "BASS",  node = 1, prop = "MidGain",  freq = 200 },
+	{ id = "sub",        label = "SUB",   node = 1, prop = "LowGain",  freq = 100 },
+	{ id = "bass",       label = "BASS",  node = 1, prop = "MidGain",  freq = 300 },
 	{ id = "lowmid",     label = "LO-M",  node = 1, prop = "HighGain", freq = 600 },
 	{ id = "mid",        label = "MID",   node = 2, prop = "LowGain",  freq = 1500 },
 	{ id = "uppermid",   label = "UP-M",  node = 2, prop = "MidGain",  freq = 3500 },
@@ -461,7 +463,20 @@ screen.Name = "RobloxEQ"
 screen.ResetOnSpawn = false
 screen.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screen.DisplayOrder = 500
-screen.Parent = getGui()
+
+-- executors can reach CoreGui; a plain LocalScript cannot, so fall back to PlayerGui
+local parented = pcall(function()
+	screen.Parent = getGui()
+end)
+if not parented or not screen.Parent then
+	pcall(function()
+		screen.Parent = player:WaitForChild("PlayerGui", 10)
+	end)
+end
+if not screen.Parent then
+	warn("[RobloxEQ] no GUI host available")
+	return
+end
 
 local main = make("Frame", {
 	Name = "Main",
@@ -1108,11 +1123,13 @@ updateStatus = function()
 		end
 	end
 
-	local api = "unknown"
+	-- UseAudioApi is unreadable from a client script (Studio/plugin identity only),
+	-- so say that instead of showing a fake "unknown".
+	local api = nil
 	pcall(function()
 		api = tostring(VoiceChatService.UseAudioApi)
 	end)
-	table.insert(lines, "UseAudioApi: " .. api)
+	table.insert(lines, "UseAudioApi: " .. (api or "not readable from a client script (checked via mic Active)"))
 
 	local out = "none"
 	pcall(function()
