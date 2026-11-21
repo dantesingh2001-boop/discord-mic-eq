@@ -27,6 +27,13 @@ if raw.githubusercontent is blocked. If you want a direct link instead of the lo
 loadstring(game:HttpGet("https://raw.githubusercontent.com/dantesingh2001-boop/discord-mic-eq/main/roblox/RobloxEQ.lua"))()
 ```
 
+### On a phone
+
+A Roblox script cannot EQ your transmit voice on mobile — Roblox hands the encoder whatever the OS
+gives it. The route that does work is a virtual-mic app that processes the mic *before* the OS hands
+it over: **[mobile.md](mobile.md)** covers the Android ladder (MicUp software loopback / Shizuku /
+root), the iOS answer (hardware only), and all six presets re-sampled onto a 10-band EQ.
+
 ### When it does not work
 
 Paste this instead — it prints one report and changes nothing:
