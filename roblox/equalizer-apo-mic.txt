@@ -1,0 +1,94 @@
+# Equalizer APO - microphone config for the "Loud + Clear" preset
+# from projects/discord-mic-eq (roblox/RobloxEQ.lua, same preset table).
+#
+# THIS is the file that changes what other players hear in Roblox.
+# RobloxEQ.lua itself can only monitor locally.
+#
+# Install
+#   1. Equalizer APO -> Configurator -> tick your MICROPHONE capture device -> reboot
+#   2. Paste this file into C:\Program Files\EqualizerAPO\config\config.txt
+#   3. Replace the Device: line below with your mic's exact name
+#      (the Configurator window lists device names verbatim)
+#   4. Roblox -> Settings -> Voice & Video -> Microphone = that device
+#
+# Everything after a non-matching Device: line is skipped, so a wrong name
+# results in silence-from-this-config rather than EQ applied to your speakers.
+
+Device: Microphone (*)
+
+# --- preamp ------------------------------------------------------------------
+# Loud + Clear uses +6 dB. Raise toward +12 for a hot mic, lower to 0 or negative
+# if you hear the noise floor. Negative is fine and often the right answer.
+Preamp: 6 dB
+
+# --- 9 band curve ------------------------------------------------------------
+# Band centres and gains match the script's 9 sliders, taken from the preset.
+
+Filter: ON PK Fc 60   Hz Gain  2 dB Q 1.1
+Filter: ON PK Fc 200  Hz Gain  4 dB Q 1.0
+Filter: ON PK Fc 600  Hz Gain  2 dB Q 1.0
+Filter: ON PK Fc 1500 Hz Gain  1 dB Q 1.0
+Filter: ON PK Fc 3500 Hz Gain  2 dB Q 1.0
+Filter: ON PK Fc 7000 Hz Gain  4 dB Q 1.0
+Filter: ON PK Fc 13000 Hz Gain 3 dB Q 1.0
+Filter: ON PK Fc 17000 Hz Gain 2 dB Q 1.0
+Filter: ON HS Fc 20000 Hz Gain 1 dB
+
+# --- other presets -----------------------------------------------------------
+# Comment out the block above and uncomment one of these.
+#
+# Broadcast (+8 dB preamp)
+# Filter: ON PK Fc 60   Hz Gain -6 dB Q 1.1
+# Filter: ON PK Fc 200  Hz Gain -2 dB Q 1.0
+# Filter: ON PK Fc 600  Hz Gain  1 dB Q 1.0
+# Filter: ON PK Fc 1500 Hz Gain  3 dB Q 1.0
+# Filter: ON PK Fc 3500 Hz Gain  4 dB Q 1.0
+# Filter: ON PK Fc 7000 Hz Gain  5 dB Q 1.0
+# Filter: ON PK Fc 13000 Hz Gain 3 dB Q 1.0
+# Filter: ON PK Fc 17000 Hz Gain 1 dB Q 1.0
+# Filter: ON HS Fc 20000 Hz Gain 0 dB
+#
+# Deep Radio (+5 dB preamp)
+# Filter: ON PK Fc 60   Hz Gain  6 dB Q 1.1
+# Filter: ON PK Fc 200  Hz Gain  5 dB Q 1.0
+# Filter: ON PK Fc 600  Hz Gain  2 dB Q 1.0
+# Filter: ON PK Fc 1500 Hz Gain  0 dB Q 1.0
+# Filter: ON PK Fc 3500 Hz Gain -1 dB Q 1.0
+# Filter: ON PK Fc 7000 Hz Gain  1 dB Q 1.0
+# Filter: ON PK Fc 13000 Hz Gain 2 dB Q 1.0
+# Filter: ON PK Fc 17000 Hz Gain 1 dB Q 1.0
+# Filter: ON HS Fc 20000 Hz Gain 0 dB
+#
+# Clarity Max (+4 dB preamp)
+# Filter: ON PK Fc 60   Hz Gain -9 dB Q 1.1
+# Filter: ON PK Fc 200  Hz Gain -4 dB Q 1.0
+# Filter: ON PK Fc 600  Hz Gain  1 dB Q 1.0
+# Filter: ON PK Fc 1500 Hz Gain  4 dB Q 1.0
+# Filter: ON PK Fc 3500 Hz Gain  7 dB Q 1.0
+# Filter: ON PK Fc 7000 Hz Gain  8 dB Q 1.0
+# Filter: ON PK Fc 13000 Hz Gain 6 dB Q 1.0
+# Filter: ON PK Fc 17000 Hz Gain 4 dB Q 1.0
+# Filter: ON HS Fc 20000 Hz Gain 2 dB
+#
+# Warm Bass Voice (+7 dB preamp)
+# Filter: ON PK Fc 60   Hz Gain  8 dB Q 1.1
+# Filter: ON PK Fc 200  Hz Gain  7 dB Q 1.0
+# Filter: ON PK Fc 600  Hz Gain  4 dB Q 1.0
+# Filter: ON PK Fc 1500 Hz Gain  1 dB Q 1.0
+# Filter: ON PK Fc 3500 Hz Gain -1 dB Q 1.0
+# Filter: ON PK Fc 7000 Hz Gain -2 dB Q 1.0
+# Filter: ON PK Fc 13000 Hz Gain -3 dB Q 1.0
+# Filter: ON PK Fc 17000 Hz Gain -4 dB Q 1.0
+# Filter: ON HS Fc 20000 Hz Gain -5 dB
+
+# --- corrections -------------------------------------------------------------
+# A cheap headset mic usually needs these before any preset sounds good:
+#   Filter: ON HP Fc 90 Hz        # kills desk rumble / handling noise
+#   Filter: ON PK Fc 250 Hz Gain -3 dB Q 1.2   # cardioid proximity boom
+#   Filter: ON PK Fc 6000 Hz Gain -2 dB Q 1.4  # sibilance
+
+# --- what this cannot do -----------------------------------------------------
+# The script's BOOST tiers (+40..+80 dB) and tanh soft clip are not EQ filters.
+# Equalizer APO has no saturation/limiter stage for a capture device. For those,
+# route the mic through VoiceMeeter Banana (gate/compressor/limiter) or VB-Cable:
+#   Mic -> VoiceMeeter strip -> B1 -> VB-Audio Virtual Cable -> Roblox input

@@ -8,15 +8,19 @@
   },
   "scripts": {
     "test": "node test/run.mjs",
+    "test:ports": "node test/ports.mjs",
+    "test:max": "node test/max-check.mjs",
     "popup-shot": "node popup-shot.mjs",
     "panel-shot": "node panel-shot.mjs",
-    "test:kettu": "node test/kettu-plugin.mjs"
+    "test:kettu": "node test/kettu-plugin.mjs",
+    "test:luau": "node test/luau-smoke.mjs"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "type": "commonjs",
   "devDependencies": {
-    "playwright": "^1.65.1"
+    "playwright": "^1.65.1",
+    "fengari": "^0.1.5"
   }
 }
