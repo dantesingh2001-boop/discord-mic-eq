@@ -27,6 +27,28 @@ if raw.githubusercontent is blocked. If you want a direct link instead of the lo
 loadstring(game:HttpGet("https://raw.githubusercontent.com/dantesingh2001-boop/discord-mic-eq/main/roblox/RobloxEQ.lua"))()
 ```
 
+### When it does not work
+
+Paste this instead — it prints one report and changes nothing:
+
+```lua
+loadstring(game:HttpGet("https://raw.githubusercontent.com/dantesingh2001-boop/discord-mic-eq/main/roblox/diagnose.lua"))()
+```
+
+It reports: executor surfaces (`loadstring`, `gethui`, `getgenv`, `writefile`), which HTTP
+function exists for the bridge (`request`, `syn.request`, `http_request`…), whether the repo is
+downloadable, whether every audio class can be created, the real crossover floor, whether
+`UseAudioApi` is readable, the mic node with `Active`/`Muted`, the viewport, and a verdict.
+
+Two bugs this hunt turned up, both fixed:
+
+* **Bridge said "no request() in this executor".** The lookup used `rawget(_G, "request")`, but
+  executors inject `request` / `syn` into the *script environment*, not `_G`. It now probes
+  `getgenv()`, `_G`, then `loadstring("return request")()`, which reaches injected globals.
+* **Panel hung off the screen on phones.** A fixed `384x548` frame centred at `-192` leaves a
+  narrow viewport most of the panel clipped, which looks identical to "nothing happened". The
+  panel now scales itself down to the viewport (`UIScale`, floor 0.45) and anchors centre-top.
+
 GitHub changes **how the script arrives**, not what it can do. Everything earlier in this
 document still holds after it loads.
 

@@ -233,6 +233,34 @@ mic.Active = true
 mic.Muted = false
 mic.Parent = player
 
+
+-- real (small) JSON encoder so the bridge test can inspect what was sent
+local function jsonEncode(v)
+	local t = type(v)
+	local Q = string.char(34)
+	local BS = string.char(92)
+	if t == "string" then
+		return Q .. select(1, v:gsub(Q, BS .. Q)) .. Q
+	elseif t == "number" then
+		return tostring(v)
+	elseif t == "boolean" then
+		return tostring(v)
+	elseif t == "table" then
+		local parts = {}
+		for k, val in pairs(v) do
+			parts[#parts + 1] = Q .. tostring(k) .. Q .. ":" .. jsonEncode(val)
+		end
+		return "{" .. table.concat(parts, ",") .. "}"
+	end
+	return "null"
+end
+
+POSTS = {}
+request = function(options)
+	table.insert(POSTS, options)
+	return { StatusCode = 200, StatusMessage = "OK", Body = "{}" }
+end
+
 local services = {
 	Players = { LocalPlayer = player, PlayerAdded = signal() },
 	UserInputService = {
@@ -243,7 +271,7 @@ local services = {
 	},
 	HttpService = {
 		JSONEncode = function(_, t)
-			return "{}"
+			return jsonEncode(t)
 		end,
 		JSONDecode = function(_, s)
 			return {}

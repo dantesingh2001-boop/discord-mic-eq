@@ -478,15 +478,30 @@ if not screen.Parent then
 	return
 end
 
+-- Responsive: on a phone viewport a fixed 384x548 panel hangs off the screen,
+-- which looks exactly like "the script does nothing". Scale it to fit instead.
+local PANEL_W, PANEL_H = 384, 548
+local viewport = Vector2.new(1280, 720)
+pcall(function()
+	if workspace.CurrentCamera then
+		viewport = workspace.CurrentCamera.ViewportSize
+	end
+end)
+local panelScale = math.clamp(math.min((viewport.X - 16) / PANEL_W, (viewport.Y - 60) / PANEL_H), 0.45, 1)
+
 local main = make("Frame", {
 	Name = "Main",
-	Size = UDim2.fromOffset(384, 548),
-	Position = UDim2.new(0.5, -192, 0, 36),
+	Size = UDim2.fromOffset(PANEL_W, PANEL_H),
+	Position = UDim2.new(0.5, 0, 0, 34),
+	AnchorPoint = Vector2.new(0.5, 0),
 	BackgroundColor3 = THEME.bg,
 	BorderSizePixel = 0,
 }, screen)
 corner(main, 8)
 stroke(main, THEME.stroke, 1, 0.15)
+if panelScale < 0.999 then
+	make("UIScale", { Scale = panelScale }, main)
+end
 
 local titleBar = make("Frame", {
 	Size = UDim2.new(1, 0, 0, 30),
@@ -1239,14 +1254,45 @@ end
 -- Equalizer APO's config, which applies to the mic every other player hears.
 --------------------------------------------------------------------------------
 
+-- Executors expose `request` / `syn.request` in the script environment, NOT in
+-- `_G`, so a rawget(_G, ...) lookup always came back nil and the bridge claimed
+-- it had no HTTP. Probe getgenv, _G, then a loadstring lookup, which reaches
+-- whatever globals the executor injected.
+local function envGet(name)
+	local ok, v = pcall(function()
+		local genv = getgenv and getgenv()
+		if genv and genv[name] ~= nil then
+			return genv[name]
+		end
+		return _G[name]
+	end)
+	if ok and v ~= nil then
+		return v
+	end
+	if type(loadstring) == "function" then
+		local ok2, v2 = pcall(function()
+			return loadstring("return " .. name)()
+		end)
+		if ok2 and v2 ~= nil then
+			return v2
+		end
+	end
+	return nil
+end
+
+local HTTP_NAMES = { "request", "http_request", "http", "syn", "fluxus", "krnl", "delta" }
+local httpName = nil
+
 local function resolveHttp()
-	for _, name in ipairs({ "request", "http_request", "http", "syn", "fluxus" }) do
-		local fn = rawget(_G, name)
-		if type(fn) == "function" then
-			return fn
-		elseif type(fn) == "table" and type(fn.request) == "function" then
+	for _, name in ipairs(HTTP_NAMES) do
+		local v = envGet(name)
+		if type(v) == "function" then
+			httpName = name
+			return v
+		elseif type(v) == "table" and type(v.request) == "function" then
+			httpName = name .. ".request"
 			return function(options)
-				return fn.request(options)
+				return v.request(options)
 			end
 		end
 	end
@@ -1284,7 +1330,7 @@ local function sendBridge()
 	pcall(function()
 		code = res.StatusCode or res.status or res.Status
 	end)
-	bridgeStatus = "bridge: HTTP " .. tostring(code or "?") .. " - other players get this curve"
+	bridgeStatus = string.format("bridge: %s -> HTTP %s - other players get this curve", tostring(httpName), tostring(code or "?"))
 end
 
 pushBridge = function()
@@ -1292,7 +1338,19 @@ pushBridge = function()
 		return
 	end
 	if not httpRequest then
-		bridgeStatus = "bridge: no request() in this executor - use syn.request / http_request"
+		-- re-probe: some executors inject the API slightly after the script starts
+		httpRequest = resolveHttp()
+	end
+	if not httpRequest then
+		local seen = {}
+		for _, name in ipairs(HTTP_NAMES) do
+			local v = envGet(name)
+			if v ~= nil then
+				table.insert(seen, name .. ":" .. type(v))
+			end
+		end
+		bridgeStatus = "bridge: no HTTP function found (tried " .. table.concat(HTTP_NAMES, ", ") .. "; saw "
+			.. (#seen > 0 and table.concat(seen, ", ") or "nothing") .. ")"
 		return
 	end
 	if bridgeScheduled then
@@ -1428,6 +1486,46 @@ function API.status()
 		wires = #Audio.wires,
 		state = STATE,
 	}
+end
+
+function API.diagnose()
+	local report = {}
+	local function has(name, want)
+		local fn
+		if name == "gethui" then
+			fn = gethui
+		elseif name == "getgenv" then
+			fn = getgenv
+		elseif name == "writefile" then
+			fn = writefile
+		elseif name == "loadstring" then
+			fn = loadstring
+		else
+			fn = envGet(name)
+		end
+		return type(fn) == want
+	end
+	table.insert(report, "executor: gethui=" .. tostring(has("gethui", "function"))
+		.. " getgenv=" .. tostring(has("getgenv", "function"))
+		.. " loadstring=" .. tostring(has("loadstring", "function"))
+		.. " writefile=" .. tostring(has("writefile", "function")))
+	local http = httpRequest and httpName or nil
+	table.insert(report, "http: " .. tostring(http))
+	table.insert(report, "viewport: " .. tostring(viewport.X) .. "x" .. tostring(viewport.Y) .. " panelScale=" .. string.format("%.2f", panelScale))
+	table.insert(report, "audio graph: " .. tostring(Audio.ok) .. " " .. tostring(Audio.err or ""))
+	table.insert(report, "wires: " .. #Audio.wires)
+	if Audio.mic then
+		table.insert(report, "mic: " .. (Audio.micCreated and "script-created" or "game-provided")
+			.. " Active=" .. tostring(Audio.mic.Active) .. " Muted=" .. tostring(Audio.mic.Muted))
+	end
+	if Audio.analyzer then
+		table.insert(report, "rms: " .. tostring(Audio.analyzer.RmsLevel))
+	end
+	table.insert(report, "bridge: " .. tostring(STATE.bridge) .. " status=" .. bridgeStatus)
+	for _, line in ipairs(report) do
+		print("[RobloxEQ] " .. line)
+	end
+	return table.concat(report, "\n")
 end
 
 API.destroy = destroyAll

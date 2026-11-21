@@ -64,7 +64,7 @@ check("mic feeds both the tap and the chain (2)", micFeeds == 2, micFeeds)
 
 -- crossover wiring: three series shelves at the documented points
 local eqs = alive("AudioEqualizer")
-check("crossover 1 = 120/400", eqs[1].MidRange.Min == 120 and eqs[1].MidRange.Max == 400)
+check("crossover 1 = 200/400 (engine floor)", eqs[1].MidRange.Min == 200 and eqs[1].MidRange.Max == 400)
 check("crossover 2 = 900/2600", eqs[2].MidRange.Min == 900 and eqs[2].MidRange.Max == 2600)
 check("crossover 3 = 5500/11000", eqs[3].MidRange.Min == 5500 and eqs[3].MidRange.Max == 11000)
 
@@ -132,6 +132,21 @@ check("monitor on rewires output", #alive("Wire") == 11, #alive("Wire"))
 eq.toggle("limiter")
 check("limiter bypass drops a node", #alive("Wire") == 10, #alive("Wire"))
 eq.toggle("limiter")
+
+-- bridge: the executor HTTP path must be found and must carry the curve
+local postsBefore = #POSTS
+eq.toggle("bridge")
+eq.preamp(9)
+local posts = POSTS
+check("bridge posts when enabled", #posts >= 1, #posts)
+local last = posts[#posts]
+check("bridge posts to the loopback URL", last and last.Url and last.Url:find("7311") == nil and last.Url:find("127.0.0.1") ~= nil, last and last.Url)
+check("bridge sends POST", last and last.Method == "POST", last and last.Method)
+check("bridge body carries the preamp", last and last.Body and last.Body:find("preamp", 1, true) ~= nil, last and last.Body and #last.Body)
+eq.toggle("bridge")
+local afterOff = #POSTS
+eq.preamp(3)
+check("bridge stays quiet when off", #POSTS == afterOff, #POSTS - afterOff)
 
 -- level tap drives the meter path without errors
 local analyzer = alive("AudioAnalyzer")[1]
