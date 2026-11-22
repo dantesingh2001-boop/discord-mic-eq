@@ -171,7 +171,7 @@ AudioDeviceInput -> AudioAnalyzer   (tap for the live level meter, not in the au
 ```
 
 That is a genuine EQ: 9 sliders, one per `AudioEqualizer` gain property, so what you drag is
-exactly what the engine sees. Measurements are in `test/luau-smoke.mjs` (37 checks):
+exactly what the engine sees. Measurements are in `test/luau-smoke.mjs` (56 checks):
 band gains land on the filter instances, `+20 dB` preamp sums to `20.0 dB` across the faders,
 `1k` boost to `60.0 dB`, `10k` to `80.0 dB`, clamps match engine ranges, the mic feeds both the
 level tap and the chain, wires appear and disappear as toggles change the chain shape, and
@@ -290,5 +290,9 @@ Runs `RobloxEQ.lua` under Lua 5.3 (fengari) against Roblox API stubs in `test/st
 then asserts on the resulting instance graph and gain math. It checks what a Lua-only harness
 can check: node creation (3 EQ, 4 faders, limiter, distortion, analyzer, output), wire topology,
 preset application, dB accounting across chained faders, clamping, toggle rewiring, the level
-tap, and teardown. It cannot check whether the engine produces sound — `AudioDeviceInput`
-`Active` state and actual monitoring need a real client.
+tap, and teardown. It also checks the new v1.1 behaviour: the transmit gain landing on
+`AudioDeviceInput.Volume`, the chain-gain readout matching the faders, a late `AudioDeviceInput`
+being adopted on `refresh()`, `destroy()` putting the device volume back, and the panel geometry
+measured on the instances (9 rows stack into 496 of 500 px, no row child overflows its width).
+It cannot check whether the engine produces sound — `AudioDeviceInput` `Active` state and actual
+monitoring need a real client, which this repo does not have.
