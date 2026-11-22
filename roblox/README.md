@@ -304,6 +304,9 @@ Two rough edges worth knowing:
 
 Roblox records from the OS input device, so process the mic before Roblox ever opens it.
 
+Six ready-to-paste configs, one per preset, plus how an APO differs from a hook:
+**[`apo/`](apo/README.md)**.
+
 ### Equalizer APO (parametric EQ + preamp)
 
 1. Install **Equalizer APO**, run **Configurator**, tick your **microphone**, reboot.

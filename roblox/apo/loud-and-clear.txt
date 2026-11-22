@@ -1,0 +1,36 @@
+# Equalizer APO - microphone config: Loud + Clear
+# One of the six presets from roblox/RobloxEQ.lua (same gains).
+#
+# THIS is the file that changes what other players hear in Roblox.
+#
+# Install
+#   1. Equalizer APO -> Configurator -> tick your MICROPHONE capture device -> reboot
+#   2. Copy this file to C:\Program Files\EqualizerAPO\config\config.txt
+#   3. Replace the Device: line with your mic's exact name (the Configurator lists it)
+#   4. Roblox -> Settings -> Voice & Video -> Microphone = that device
+#   5. Nothing else to run. Close Equalizer APO's editor; the driver does the work.
+#
+# A wrong Device: name means this config is skipped (silence from it), never that
+# it lands on your speakers - the Configurator only offers capture endpoints here.
+
+Device: Microphone (*)
+
+# --- preamp --------------------------------------------------------------
+# Loud + Clear uses +6 dB. Lower it (0 or negative is fine) if you hear hiss;
+# raise it toward +12 only if your mic is quiet and your room is quiet too.
+Preamp: 6 dB
+
+# --- 9 band curve ---------------------------------------------------------
+# band centres match the script's sliders (10-band re-sample of the curve)
+Filter: ON PK Fc 60  Hz Gain  2 dB Q 1.0
+Filter: ON PK Fc 200 Hz Gain  4 dB Q 1.0
+Filter: ON PK Fc 600 Hz Gain  2 dB Q 1.0
+Filter: ON PK Fc 1500 Hz Gain  1 dB Q 1.0
+Filter: ON PK Fc 3500 Hz Gain  2 dB Q 1.0
+Filter: ON PK Fc 7000 Hz Gain  4 dB Q 1.0
+Filter: ON PK Fc 13000 Hz Gain  3 dB Q 1.0
+Filter: ON PK Fc 17000 Hz Gain  2 dB Q 1.0
+Filter: ON HS Fc 20000 Hz Gain  1 dB
+
+# headroom: peak band +4 dB plus preamp +6 dB clips the encoder on a
+# loud mic. Drop the preamp before raising a band.
