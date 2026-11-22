@@ -73,6 +73,7 @@ pcall(function()
 	isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 end)
 
+local VERSION = "1.2"
 local CONFIG_FILE = "RobloxEQ.json"
 local BRIDGE_HOST = "127.0.0.1:7331"
 
@@ -907,7 +908,7 @@ local titleText = label(titleBar, "MIC EQ", 13, THEME.text, FONT_BOLD)
 titleText.Size = UDim2.fromOffset(70, TITLE_H)
 titleText.Position = UDim2.fromOffset(10, 0)
 
-local subtitle = label(titleBar, compact and "LOCAL MONITOR" or "ROBLOX AUDIO API  ·  LOCAL MONITOR", 8, THEME.dim, FONT)
+local subtitle = label(titleBar, "AUDIO API  ·  v" .. VERSION .. (compact and "  ·  LOCAL" or "  ·  LOCAL MONITOR"), 8, THEME.dim, FONT)
 subtitle.Size = UDim2.new(1, -170, 1, 0)
 subtitle.Position = UDim2.fromOffset(72, 1)
 
@@ -1957,6 +1958,7 @@ diagnostics = function()
 		return type(fn) == want
 	end
 
+	add("version: v" .. VERSION)
 	add("executor: gethui=" .. tostring(has(gethui, "function"))
 		.. " getgenv=" .. tostring(has(getgenv, "function"))
 		.. " loadstring=" .. tostring(has(loadstring, "function"))
@@ -2133,13 +2135,14 @@ function API.status()
 		rx = STATE.rx,
 		rxSources = Audio.rxSources,
 		bridge = bridgeStatus,
+		version = VERSION,
 		viewport = { X = getViewport().X, Y = getViewport().Y },
 		panelScale = scale,
 		state = STATE,
 	}
 end
 
-print(string.format("[RobloxEQ] loaded - graph %s, %d wires, mic %s",
+print(string.format("[RobloxEQ] v%s loaded - graph %s, %d wires, mic %s", VERSION,
 	Audio.ok and "ok" or ("FAILED: " .. tostring(Audio.err)),
 	#Audio.wires,
 	Audio.mic and (Audio.micCreated and "script-created" or "engine") or "none yet"))

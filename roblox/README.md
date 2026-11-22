@@ -185,7 +185,9 @@ teardown leaves no dangling wires.
 1. Join an experience that allows microphones (Experience Settings → Communication →
    **Enable Microphone**) with `VoiceChatService.UseAudioApi = Enabled`.
 2. Paste `RobloxEQ.lua` into your executor and run it.
-3. The panel appears top-centre; drag the title bar to move it.
+3. The panel appears top-centre and shows `v1.2` in its title bar; drag the title bar to move it.
+   If it does not say `v1.2`, Discord/github raw served a cached copy - re-run the loader (it
+   appends a cache buster now) and check the version in the panel.
 
 ### Controls
 
@@ -221,7 +223,7 @@ RobloxEQ.rxGain(12)         -- receive-side gain, 0..40 dB
 RobloxEQ.boost("1k")
 RobloxEQ.toggle("monitor")
 RobloxEQ.refresh()          -- re-read the mic device and rebuild the wires
-RobloxEQ.status()           --> { graph = true, micActive = true, wires = 11, gainDb = 12.0, ... }
+RobloxEQ.status()           --> { version = "1.2", graph = true, micActive = true, wires = 11, ... }
 RobloxEQ.diagnostics()      -- the same report the ? button prints
 RobloxEQ.bridgeHost("192.168.1.20:7331")
 RobloxEQ.collapse(true)
