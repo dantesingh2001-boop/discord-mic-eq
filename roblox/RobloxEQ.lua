@@ -1,6 +1,6 @@
 --!nocheck
 --[[
-	RobloxEQ v1.1
+	RobloxEQ v1.2
 	Client-side equalizer for Roblox's Audio API (executor / client script).
 
 	Graph:  AudioDeviceInput -> EQ1 -> EQ2 -> EQ3 -> Fader x4 -> Distortion
@@ -31,6 +31,11 @@
 	  RobloxEQ.status()
 	  RobloxEQ.diagnostics()
 	  RobloxEQ.destroy()
+
+	v1.2 adds the receive side: RX OTHERS wires every other player's incoming
+	voice through a second copy of the same EQ chain into your speakers. That
+	direction is the one a client graph really can change - and it is the same
+	code path on PC and on an Android executor. See the RX section below.
 
 	v1.1 fixes (why it "did nothing" before):
 	  * voice chat creates the AudioDeviceInput late - the old build made its own
