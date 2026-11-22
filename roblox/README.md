@@ -1,13 +1,18 @@
 # Roblox
 
-Two different things live here, and only one of them changes what other players hear.
+Different things live here, and they change different things. This table is the whole story:
 
-| File | What it is | Changes what others hear? |
+| Feature | What it is | Who hears the EQ? |
 |---|---|---|
-| `RobloxEQ.lua` | Executor/client script: a real mic EQ built from Roblox's `AudioDeviceInput` + `AudioEqualizer` + `AudioFader` + `AudioLimiter` chain, with a draggable panel and presets | **No.** It monitors your mic **locally** |
-| `equalizer-apo-mic.txt` | Equalizer APO config for the mic capture device | **Yes**, in Roblox and every other app |
+| `RobloxEQ.lua` — transmit chain | A real graph: `AudioDeviceInput` → `AudioEqualizer` ×3 → `AudioFader` ×4 → `AudioDistortion` → `AudioCompressor` → `AudioLimiter` → `AudioDeviceOutput`, plus a draggable panel and presets | **Only you**, in your own headphones. It is a local monitor |
+| `RobloxEQ.lua` — **RX OTHERS** | A second copy of that chain fed by every other player's `AudioDeviceInput` | **Only you** — but it processes *their* voice, so *you* hear *them* EQ'd. Works on PC and on an Android executor |
+| `RobloxEQ.lua` — **XFER** | Writes `AudioDeviceInput.Volume` (0..3 = +9.5 dB) | **Maybe** others, up to +9.5 dB of gain. Client-set, best effort, and **not an EQ** |
+| `equalizer-apo-mic.txt`, VoiceMeeter, MicUp/Shizuku | OS-level processing *before* Roblox opens the mic device | **Everyone**, because it changes what gets encoded |
 
-Read the first two sections before expecting the script to boost your voice in a call.
+There is no row in that table where a script makes **your** voice EQ'd for **everyone**. That is the
+engine boundary (native capture → Opus, before any Luau runs) and it is identical on PC and on a
+phone. The honest demo is the RX row: run the script on your friend's client and they hear *you*
+through the same filter chain the Chrome extension uses.
 
 ---
 
