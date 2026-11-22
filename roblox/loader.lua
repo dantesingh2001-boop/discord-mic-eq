@@ -15,19 +15,33 @@
 local PRIMARY = "https://raw.githubusercontent.com/dantesingh2001-boop/discord-mic-eq/main/roblox/RobloxEQ.lua"
 local MIRROR = "https://cdn.jsdelivr.net/gh/dantesingh2001-boop/discord-mic-eq@main/roblox/RobloxEQ.lua"
 
+-- raw.githubusercontent.com caches hard: after a push it kept serving the
+-- previous RobloxEQ.lua for minutes, so a re-run of this loader looked like
+-- "the update did nothing". A unique query string is a new cache key, which
+-- makes the origin fetch every time.
+local function cacheBuster()
+	local ok, t = pcall(function()
+		return os.time()
+	end)
+	if ok and type(t) == "number" then
+		return "?v=" .. tostring(t)
+	end
+	return "?v=" .. tostring(os.clock())
+end
+
 local function fetch(url)
 	local ok, body = pcall(function()
-		return game:HttpGet(url, true)
+		return game:HttpGet(url .. cacheBuster(), true)
 	end)
 	if ok and type(body) == "string" and #body > 2000 and string.find(body, "RobloxEQ", 1, true) then
-		return body
+		return body, url
 	end
 	return nil
 end
 
-local source, used = fetch(PRIMARY), PRIMARY
+local source, used = fetch(PRIMARY)
 if not source then
-	source, used = fetch(MIRROR), MIRROR
+	source, used = fetch(MIRROR)
 end
 
 if not source then

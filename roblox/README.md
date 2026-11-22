@@ -57,6 +57,9 @@ Bugs this hunt turned up, all fixed in v1.1:
   device the moment it appears (`RobloxEQ.refresh()` does it on demand).
 * **Running the loader twice stacked panels and audio graphs.** A second run destroys the previous
   instance first.
+* **raw.githubusercontent.com served a stale `RobloxEQ.lua` after a push**, so re-running the
+  loader looked like the update did nothing. `loader.lua` now appends a `?v=<os.time()>` cache
+  buster, which is a fresh cache key, so the origin is fetched every time.
 * **Bridge said "no request() in this executor".** The lookup used `rawget(_G, "request")`, but
   executors inject `request` / `syn` into the *script environment*, not `_G`. It now probes
   `getgenv()`, `_G`, then `loadstring("return request")()`, which reaches injected globals.
