@@ -261,8 +261,28 @@ request = function(options)
 	return { StatusCode = 200, StatusMessage = "OK", Body = "{}" }
 end
 
+-- another player, so the receive-side (RX) chain has a real device to adopt
+local otherPlayers = {}
+local friend = Instance.new("Player")
+friend.Name = "Friend"
+local friendMic = Instance.new("AudioDeviceInput")
+friendMic.Muted = false
+friendMic.Parent = friend
+otherPlayers[1] = friend
+_G.TEST_FRIEND = friend
+
 local services = {
-	Players = { LocalPlayer = player, PlayerAdded = signal() },
+	Players = {
+		LocalPlayer = player,
+		PlayerAdded = signal(),
+		GetPlayers = function()
+			local list = { player }
+			for i, p in ipairs(otherPlayers) do
+				list[#list + 1] = p
+			end
+			return list
+		end,
+	},
 	UserInputService = {
 		InputBegan = signal(), InputChanged = signal(), InputEnded = signal(),
 		GetMouseLocation = function()

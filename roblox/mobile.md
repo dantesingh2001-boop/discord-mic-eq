@@ -12,6 +12,11 @@ viewport, re-fits when the device rotates, is clamped to the screen while you dr
 finger 1:1 under `UIScale`, collapses to its title bar with `–`, and sizes its status box from the
 lines it actually prints. The level meter is live if the experience has opened your mic.
 
+One thing that does work identically on a phone: **RX OTHERS** (or `RobloxEQ.rx(true)`) wires every
+other player's incoming voice through a second copy of the same EQ chain into your speakers. It is
+the receive side, so it changes what you hear of them, not what they hear of you - but it is a real
+engine filter chain on real networked voice, on an Android executor, with no root and no PC.
+
 What it still cannot do on a phone is change what other players hear. The `XFER` slider writes
 `AudioDeviceInput.Volume` (the only stream gain a script has, up to +9.5 dB); it is set on the
 client, so expect it to be best effort. For a real transmit EQ use the routes below.

@@ -171,7 +171,7 @@ AudioDeviceInput -> AudioAnalyzer   (tap for the live level meter, not in the au
 ```
 
 That is a genuine EQ: 9 sliders, one per `AudioEqualizer` gain property, so what you drag is
-exactly what the engine sees. Measurements are in `test/luau-smoke.mjs` (56 checks):
+exactly what the engine sees. Measurements are in `test/luau-smoke.mjs` (66 checks):
 band gains land on the filter instances, `+20 dB` preamp sums to `20.0 dB` across the faders,
 `1k` boost to `60.0 dB`, `10k` to `80.0 dB`, clamps match engine ranges, the mic feeds both the
 level tap and the chain, wires appear and disappear as toggles change the chain shape, and
@@ -197,6 +197,7 @@ teardown leaves no dangling wires.
 | CLIP GUARD | keeps `AudioLimiter` in the chain (`MaxLevel -0.5 dB`) |
 | MONITOR | wires/unwires `AudioDeviceOutput` |
 | MUTE MIC | writes `AudioDeviceInput.Muted` — also silences the monitor |
+| RX OTHERS | wires **every other player's** `AudioDeviceInput` through a second copy of the same EQ chain into your speakers (`RobloxEQ.rx(true)`, gain `RobloxEQ.rxGain(0..40)`) |
 | BRIDGE | POSTs the curve to `eq-bridge.mjs` (desktop only) |
 | preset | ◀ ▶ cycle, `RESET`, or click the name |
 | `–` | collapse the panel to its title bar (phones) |
@@ -212,6 +213,8 @@ RobloxEQ.preset("Broadcast")
 RobloxEQ.set("bass", 6)
 RobloxEQ.preamp(12)
 RobloxEQ.transmit(6)        -- AudioDeviceInput.Volume, clamped to 0..3
+RobloxEQ.rx(true)           -- EQ other players' incoming voice
+RobloxEQ.rxGain(12)         -- receive-side gain, 0..40 dB
 RobloxEQ.boost("1k")
 RobloxEQ.toggle("monitor")
 RobloxEQ.refresh()          -- re-read the mic device and rebuild the wires
@@ -251,6 +254,41 @@ so treat it as best effort rather than a guaranteed boost.
   beyond the UI: the audible-result route is the APO config below.
 
 ---
+
+## The receive side — where a client graph *does* change networked voice
+
+Everything above is about your transmit stream, which no script can touch. The opposite direction
+is real: **another player's voice reaches your client as an `AudioDeviceInput`**, and your client
+may wire that into whatever graph it wants. That is what **RX OTHERS** does.
+
+```
+every other player's AudioDeviceInput ─┬─> RX_EQ1 -> RX_EQ2 -> RX_EQ3
+                                       └─> RX_Fader x2 -> RX_Limiter -> RX_Out (your speakers)
+```
+
+Same crossovers, same 9-band curve, same limiter as the transmit chain. It is built the moment you
+enable RX — `RX OTHERS`, or `RobloxEQ.rx(true)` — and the fan-in is rebuilt when a player joins,
+leaves or opens their mic (checked once a second, and on `PlayerAdded` via the same loop). Gain is
+separate from the transmit preamp (`RobloxEQ.rxGain(0..40)`), because the receive side is the one
+place where a +60 dB mistake goes straight into your ears.
+
+**What this proves:** a real engine filter chain applied to real, networked, Opus-decoded voice,
+entirely client-side, on PC *and* on an Android executor — no server, no asset upload, no game
+support. Set `Clarity Max`, enable RX, and every player in the call sounds like the extension's
+curve. That is a straight answer to "are executors strong enough to run real DSP".
+
+**What it does not prove:** that *your* voice is processed before it is encoded. It isn't, on any
+platform. RX changes what **you** hear of **them**. For your friend to hear *you* through the EQ,
+the script has to run on **their** client (exactly the same toggle), or you accept the OS-level
+route in the next section.
+
+Two rough edges worth knowing:
+
+* The extra wire to your `AudioDeviceOutput` bypasses the game's own distance attenuation, so you
+  hear everyone at full level regardless of where they are. That is the useful part *and* the
+  dangerous part — leave `RX OTHERS` off in a 50-player server unless you want a wall of voices.
+* If the game already wires voices to emitters, both paths play at once. Mute the game's voice
+  volume, or keep RX gain at 0 dB, if you hear double.
 
 ## The route that actually reaches other players
 
@@ -293,6 +331,10 @@ preset application, dB accounting across chained faders, clamping, toggle rewiri
 tap, and teardown. It also checks the new v1.1 behaviour: the transmit gain landing on
 `AudioDeviceInput.Volume`, the chain-gain readout matching the faders, a late `AudioDeviceInput`
 being adopted on `refresh()`, `destroy()` putting the device volume back, and the panel geometry
-measured on the instances (9 rows stack into 496 of 500 px, no row child overflows its width).
+measured on the instances (9 rows stack into 496 of 500 px, no row child overflows its width, no
+two chips overlap — that last check fails on the v1.1 chip spacing, which overlapped by 6 px), and
+the receive side: a second 3-band chain built lazily, another player's device fanned into it, the
+same band curve landing on `RX_EQ*`, gain spread across its own faders, and RX off unwiring only
+the receive chain.
 It cannot check whether the engine produces sound — `AudioDeviceInput` `Active` state and actual
 monitoring need a real client, which this repo does not have.

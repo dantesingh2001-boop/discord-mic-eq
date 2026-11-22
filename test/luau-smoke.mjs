@@ -211,6 +211,47 @@ check("status box tall enough for its lines", statusFrame and statusFrame.Size.Y
 eq.transmit(6)
 local beforeTeardown = late.Volume
 
+-- receive side: EQ other players' incoming voice (the only direction a client
+-- graph really changes networked voice, and it is platform independent)
+local wiresBeforeRx = #alive("Wire")
+eq.toggle("rx")
+check("rx builds a second 3-band chain", #alive("AudioEqualizer") == 6, #alive("AudioEqualizer"))
+check("rx adds its own output and limiter", #alive("AudioDeviceOutput") == 2 and #alive("AudioLimiter") == 2)
+check("rx fans every other mic in (1 source + 6 links)", #alive("Wire") == wiresBeforeRx + 7,
+	#alive("Wire") - wiresBeforeRx)
+
+local friendDev = TEST_FRIEND:FindFirstChildOfClass("AudioDeviceInput")
+local fed = false
+for _, w in ipairs(alive("Wire")) do
+	if w.SourceInstance == friendDev then
+		fed = true
+	end
+end
+check("the friend's mic feeds the rx equalizer", fed)
+check("rx reports how many players it is processing", eq.status().rxSources == 1, eq.status().rxSources)
+
+eq.set("air", 4)
+local airOnRx = false
+for _, inst in ipairs(alive("AudioEqualizer")) do
+	if inst.Name == "RX_EQ3" and inst.HighGain == 4 then
+		airOnRx = true
+	end
+end
+check("the same band curve reaches the rx chain", airOnRx)
+
+eq.rxGain(20)
+local rxDb = 0
+for _, f in ipairs(alive("AudioFader")) do
+	if tostring(f.Name):find("RX") and f.Volume > 0 then
+		rxDb = rxDb + 20 * math.log(f.Volume, 10)
+	end
+end
+check("rx gain spreads across its own faders", math.abs(rxDb - 20) < 0.05, rxDb)
+
+eq.toggle("rx")
+check("rx off unwires the receive chain", #alive("Wire") == wiresBeforeRx, #alive("Wire"))
+check("rx off keeps the transmit chain intact", #alive("AudioDeviceOutput") == 2)
+
 -- panel geometry, measured on the instances the script actually built:
 -- every row must stack inside the body, and every row child must fit its width
 local PANEL_W, TITLE_H, BODY_TOP, ROW_PAD = 384, 30, 36, 6
@@ -252,6 +293,34 @@ for _, row in ipairs(rows) do
 	end
 end
 check("no row child overflows the panel width", #overflow == 0, table.concat(overflow, ","))
+
+-- chips must not overlap each other either: v1.1 laid them out as
+-- index*(width+4), which overlapped CLIP GUARD/MONITOR by 6 px
+local overlaps = {}
+for _, row in ipairs(rows) do
+	local rowW = row.Size.X.Scale * PANEL_W + row.Size.X.Offset
+	local placed = {}
+	for _, child in ipairs(row.Children or {}) do
+		if child.Size and child.Size.X and child.Size.X.Scale == 0 and child.Size.Y
+			and child.Size.Y.Offset == 22 and child.Position and child.Position.X then
+			placed[#placed + 1] = {
+				x = child.Position.X.Offset,
+				w = child.Size.X.Offset,
+				name = tostring(child.Text or child.ClassName),
+			}
+		end
+	end
+	table.sort(placed, function(a, b) return a.x < b.x end)
+	for i = 2, #placed do
+		if placed[i].x < placed[i - 1].x + placed[i - 1].w - 0.01 then
+			overlaps[#overlaps + 1] = placed[i - 1].name .. "/" .. placed[i].name
+		end
+	end
+	if placed[#placed] and placed[#placed].x + placed[#placed].w > rowW + 0.01 then
+		overlaps[#overlaps + 1] = "row" .. tostring(row.LayoutOrder) .. ":off-end"
+	end
+end
+check("no two chips overlap", #overlaps == 0, table.concat(overlaps, ","))
 
 -- teardown
 eq.destroy()

@@ -129,6 +129,8 @@ local STATE = {
 	limiter = true,
 	monitor = true,
 	muteMic = false,
+	rx = false,          -- EQ other players' incoming voice (works on mobile too)
+	rxGain = 0,          -- receive-side gain, dB, 0..40 across two faders
 	bridge = false,
 	bridgeHost = BRIDGE_HOST,
 	preset = "Loud + Clear",
@@ -136,6 +138,7 @@ local STATE = {
 
 -- assigned further down; apply() is called before the bridge code exists
 local pushBridge = function() end
+local buildRxGraph
 
 local PRESETS = {
 	["Loud + Clear"] = {
@@ -192,6 +195,8 @@ local Audio = {
 	err = nil,
 	gainDb = 0,          -- gain the four faders actually ended up at
 	transmitVol = 1,     -- AudioDeviceInput.Volume actually applied
+	rx = nil,            -- receive-side chain, built lazily when RX is enabled
+	rxSources = 0,       -- how many other players are wired into it
 }
 
 local function dbToVol(db)
@@ -221,6 +226,31 @@ local function findEngineMic()
 		return mic
 	end
 	return nil
+end
+
+-- Every other player's microphone, as a stream this client may wire. This is
+-- the receive side: it is the one direction where a client-side graph really
+-- does change networked voice, and it is identical on PC and on an Android
+-- executor (property writes and wires, nothing platform-specific).
+local function otherMicDevices()
+	local list = {}
+	local ok, players = pcall(function()
+		return Players:GetPlayers()
+	end)
+	if not ok or type(players) ~= "table" then
+		return list
+	end
+	for _, plr in ipairs(players) do
+		if plr ~= player then
+			local ok2, dev = pcall(function()
+				return plr:FindFirstChildOfClass("AudioDeviceInput")
+			end)
+			if ok2 and dev then
+				list[#list + 1] = dev
+			end
+		end
+	end
+	return list
 end
 
 local function clearWires()
@@ -294,6 +324,53 @@ local function rebuildWires()
 			Audio.err = "wire failed: " .. tostring(w)
 		end
 	end
+
+	-- receive side: every other player's mic into one shared EQ, out to my speakers
+	Audio.rxSources = 0
+	local rx = Audio.rx
+	if STATE.rx and rx then
+		local sources = otherMicDevices()
+		for _, dev in ipairs(sources) do
+			local ok, w = pcall(function()
+				local wire = Instance.new("Wire")
+				wire.SourceInstance = dev
+				wire.TargetInstance = rx.eqs[1]
+				wire.Parent = rx.eqs[1]
+				return wire
+			end)
+			if ok and w then
+				table.insert(Audio.wires, w)
+				Audio.rxSources = Audio.rxSources + 1
+			end
+		end
+		local rxChain = {}
+		for i = 1, 3 do
+			if rx.eqs[i] then
+				table.insert(rxChain, rx.eqs[i])
+			end
+		end
+		for i = 1, #rx.faders do
+			table.insert(rxChain, rx.faders[i])
+		end
+		if rx.limiter then
+			table.insert(rxChain, rx.limiter)
+		end
+		if rx.output then
+			table.insert(rxChain, rx.output)
+		end
+		for i = 1, #rxChain - 1 do
+			local ok, w = pcall(function()
+				local wire = Instance.new("Wire")
+				wire.SourceInstance = rxChain[i]
+				wire.TargetInstance = rxChain[i + 1]
+				wire.Parent = rxChain[i + 1]
+				return wire
+			end)
+			if ok and w then
+				table.insert(Audio.wires, w)
+			end
+		end
+	end
 end
 
 -- Record what the device's own volume was before we ever wrote to it, so
@@ -329,8 +406,52 @@ local function applyTransmit()
 	Audio.transmitVol = ok and (tonumber(got) or vol) or vol
 end
 
+-- same curve, applied to what other players send me
+local function applyRx()
+	local rx = Audio.rx
+	if not rx then
+		return
+	end
+	for _, b in ipairs(BANDS) do
+		local eq = rx.eqs[b.node]
+		if eq then
+			local db = math.clamp(STATE.bands[b.id] or 0, -80, 10)
+			pcall(function()
+				eq[b.prop] = db
+			end)
+		end
+	end
+	local total = math.clamp(STATE.rxGain or 0, -80, 40)
+	for i = 1, #rx.faders do
+		local f = rx.faders[i]
+		if f then
+			local slice
+			if i < #rx.faders then
+				slice = math.clamp(total, 0, 20)
+				total = total - slice
+			else
+				slice = math.clamp(total, -80, 20)
+			end
+			pcall(function()
+				f.Volume = dbToVol(slice)
+			end)
+		end
+	end
+	if rx.limiter then
+		pcall(function()
+			rx.limiter.MaxLevel = -0.5
+			rx.limiter.Release = 0.05
+		end)
+	end
+end
+
 -- pushes STATE into the filter instances
 local function apply()
+	-- the receive chain is built on first use, whichever path enabled it
+	if STATE.rx and not Audio.rx then
+		buildRxGraph()
+	end
+
 	if Audio.mic then
 		pcall(function()
 			Audio.mic.Muted = STATE.muteMic
@@ -399,6 +520,7 @@ local function apply()
 		end)
 	end
 
+	applyRx()
 	rebuildWires()
 	pushBridge()
 end
@@ -504,6 +626,56 @@ local function buildGraph()
 		Audio.err = tostring(err)
 	end
 	return Audio.ok
+end
+
+-- The receive chain is only built when RX is switched on, so the default graph
+-- stays the 3 EQ / 4 fader monitor chain.
+buildRxGraph = function()
+	if Audio.rx then
+		return Audio.rx
+	end
+	local ok = pcall(function()
+		local folder = Instance.new("Folder")
+		folder.Name = "RobloxEQ_RX"
+		folder.Parent = Audio.root or workspace
+
+		local rx = { eqs = {}, faders = {}, folder = folder }
+		for i = 1, 3 do
+			local eq = Instance.new("AudioEqualizer")
+			eq.Name = "RX_EQ" .. i
+			eq.MidRange = NumberRange.new(CROSSOVERS[i][1], CROSSOVERS[i][2])
+			eq.LowGain = 0
+			eq.MidGain = 0
+			eq.HighGain = 0
+			eq.Parent = folder
+			rx.eqs[i] = eq
+		end
+		for i = 1, 2 do
+			local fader = Instance.new("AudioFader")
+			fader.Name = "RX_Fader" .. i
+			fader.Volume = dbToVol(0)
+			fader.Parent = folder
+			rx.faders[i] = fader
+		end
+		local lim = Instance.new("AudioLimiter")
+		lim.Name = "RX_ClipGuard"
+		lim.MaxLevel = -0.5
+		lim.Release = 0.05
+		lim.Parent = folder
+		rx.limiter = lim
+		local out = Instance.new("AudioDeviceOutput")
+		out.Name = "RX_Out"
+		pcall(function()
+			out.Player = player
+		end)
+		out.Parent = folder
+		rx.output = out
+		Audio.rx = rx
+	end)
+	if not ok then
+		Audio.rx = nil
+	end
+	return Audio.rx
 end
 
 --------------------------------------------------------------------------------
@@ -1241,15 +1413,15 @@ local function paintToggle(key)
 	btn.TextColor3 = on and THEME.good or THEME.dim
 end
 
-local toggleIndex = 0
+local toggleX = 0
 local function toggleButton(parent, text, width, key, onChange)
-	local btn = chipButton(parent, text, width, toggleIndex * (width + 4), function()
+	local btn = chipButton(parent, text, width, toggleX, function()
 		STATE[key] = not STATE[key]
 		paintToggle(key)
 		onChange()
 	end)
 	toggleButtons[key] = btn
-	toggleIndex = toggleIndex + 1
+	toggleX = toggleX + width + 4
 	paintToggle(key)
 	return btn
 end
@@ -1262,6 +1434,13 @@ toggleButton(toggleRow, "MONITOR", 66, "monitor", function()
 	updateStatus()
 end)
 toggleButton(toggleRow, "MUTE MIC", 68, "muteMic", function()
+	apply()
+	updateStatus()
+end)
+toggleButton(toggleRow, "RX OTHERS", 66, "rx", function()
+	if STATE.rx then
+		buildRxGraph()
+	end
 	apply()
 	updateStatus()
 end)
@@ -1379,6 +1558,7 @@ syncUI = function()
 	paintToggle("limiter")
 	paintToggle("monitor")
 	paintToggle("muteMic")
+	paintToggle("rx")
 	paintToggle("bridge")
 	redrawGraph()
 end
@@ -1438,7 +1618,9 @@ updateStatus = function()
 			math.floor(dbfs + 0.5), Audio.gainDb, STATE.limiter and "on" or "bypassed")
 		lines[#lines + 1] = string.format("xfer %+.1f dB → device vol %.2f/3 (best effort)",
 			math.clamp(STATE.transmit or 0, TRANSMIT_MIN, TRANSMIT_MAX), Audio.transmitVol)
-		lines[#lines + 1] = STATE.monitor and "monitor ON — LOCAL only: others hear your OS mic" or "monitor OFF"
+		local rxText = STATE.rx and string.format("%d player%s", Audio.rxSources, Audio.rxSources == 1 and "" or "s") or "OFF"
+		lines[#lines + 1] = string.format("monitor %s (local) · rx %s",
+			STATE.monitor and "ON" or "OFF", rxText)
 		if isMobile then
 			lines[#lines + 1] = "mobile: no transmit EQ from a script — roblox/mobile.md"
 		else
@@ -1680,6 +1862,10 @@ task.spawn(function()
 			if swapped then
 				apply()
 				updateStatus()
+			elseif STATE.rx and #otherMicDevices() ~= Audio.rxSources then
+				-- someone joined, left, or opened their mic: rewire the RX fan-in
+				apply()
+				updateStatus()
 			end
 		end
 	end
@@ -1862,6 +2048,27 @@ function API.transmit(db)
 	end
 end
 
+-- EQ other players' incoming voice through the same curve (works on mobile).
+-- This is the receive side: it changes what YOU hear of THEM, not what they
+-- hear of you - the transmit path is native engine code on every platform.
+function API.rx(on)
+	STATE.rx = on ~= false
+	if STATE.rx then
+		buildRxGraph()
+	end
+	apply()
+	syncUI()
+	updateStatus()
+end
+
+function API.rxGain(db)
+	if type(db) == "number" then
+		STATE.rxGain = math.clamp(db, 0, 40)
+		apply()
+		updateStatus()
+	end
+end
+
 function API.boost(tier)
 	if BOOST_DB[tier] then
 		STATE.boost = tier
@@ -1918,6 +2125,8 @@ function API.status()
 		wires = #Audio.wires,
 		gainDb = Audio.gainDb,
 		transmitVol = Audio.transmitVol,
+		rx = STATE.rx,
+		rxSources = Audio.rxSources,
 		bridge = bridgeStatus,
 		viewport = { X = getViewport().X, Y = getViewport().Y },
 		panelScale = scale,
