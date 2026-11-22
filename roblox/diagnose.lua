@@ -100,6 +100,12 @@ add("")
 add("== microphone ==")
 local mic = lp:FindFirstChildOfClass("AudioDeviceInput")
 add("mic under LocalPlayer: " .. tostring(mic))
+local vcsMic = nil
+pcall(function()
+	vcsMic = game:GetService("VoiceChatService"):FindFirstChildOfClass("AudioDeviceInput")
+end)
+add("mic under VoiceChatService: " .. tostring(vcsMic))
+mic = mic or vcsMic
 if mic then
 	local a = nil
 	pcall(function()
@@ -110,6 +116,11 @@ if mic then
 		m = mic.Muted
 	end)
 	add("mic Active=" .. tostring(a) .. " Muted=" .. tostring(m))
+	local v = nil
+	pcall(function()
+		v = mic.Volume
+	end)
+	add("mic Volume=" .. tostring(v) .. " (0..3 - the only stream gain a script has)")
 end
 
 add("")

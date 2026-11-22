@@ -47,14 +47,33 @@ function exists for the bridge (`request`, `syn.request`, `http_request`…), wh
 downloadable, whether every audio class can be created, the real crossover floor, whether
 `UseAudioApi` is readable, the mic node with `Active`/`Muted`, the viewport, and a verdict.
 
-Two bugs this hunt turned up, both fixed:
+Bugs this hunt turned up, all fixed in v1.1:
 
+* **The monitor never started, which is why "it does nothing".** Voice chat creates the
+  `AudioDeviceInput` under `Player` only once the mic is actually opened, often seconds after the
+  script runs (and never in a place without mic permission). v1.0 looked once at start-up, found
+  nothing, built its own device - whose `Active` flag is `RobloxScript`-only, so it never produced
+  a stream - and waited forever. The graph now polls once a second and swaps onto the engine
+  device the moment it appears (`RobloxEQ.refresh()` does it on demand).
+* **Running the loader twice stacked panels and audio graphs.** A second run destroys the previous
+  instance first.
 * **Bridge said "no request() in this executor".** The lookup used `rawget(_G, "request")`, but
   executors inject `request` / `syn` into the *script environment*, not `_G`. It now probes
   `getgenv()`, `_G`, then `loadstring("return request")()`, which reaches injected globals.
 * **Panel hung off the screen on phones.** A fixed `384x548` frame centred at `-192` leaves a
   narrow viewport most of the panel clipped, which looks identical to "nothing happened". The
-  panel now scales itself down to the viewport (`UIScale`, floor 0.45) and anchors centre-top.
+  panel scales itself to the viewport (`UIScale`, floor 0.45), re-fits on rotation, and is now
+  *clamped* to the screen while dragged - v1.0 could be dragged off the edge and lost.
+* **Drag ran at the wrong speed under `UIScale`** on a phone: the finger delta is now divided by
+  the panel scale, so the panel tracks the finger 1:1.
+* **The status box clipped its own text.** The panel height is now derived from the row heights
+  instead of a hard-coded 548 with an 86 px box that needed ~110. The long report moved to
+  `RobloxEQ.diagnostics()` (the `?` button).
+* **The "original" mic volume was captured lazily**, so a later `apply()` recorded a value the
+  script had written itself and `destroy()` restored the wrong gain. It is captured once, at the
+  moment the device is adopted.
+* **The sigma readout could lie.** It now reports the gain the four faders actually accepted
+  (read back from `AudioFader.Volume`), not the number we asked for.
 
 GitHub changes **how the script arrives**, not what it can do. Everything earlier in this
 document still holds after it loads.
@@ -170,14 +189,18 @@ teardown leaves no dangling wires.
 | Control | Meaning |
 |---|---|
 | 9 band sliders | `SUB BASS LO-M MID UP-M PRES BRILL SPRK AIR`, `-24..+10 dB` each |
-| PREAMP | `-24..+20 dB`, spread across the four faders |
+| PREAMP | preamp, `-24..+20 dB`, spread across the four faders |
+| XFER | **transmit gain**, `-24..+9.5 dB`, written to `AudioDeviceInput.Volume` (`0..3`): the only gain a script can put on the stream other players receive. Client-set, so the docs' "assign from the server to replicate" caveat applies - best effort, not a guarantee |
 | BOOST | `OFF 100x 1k 2k 3k 4k 10k` = `0 / +40 / +60 / +66 / +69.5 / +72 / +80 dB` on top of preamp |
 | Σ readout | combined gain, amber ≥ +30 dB, red ≥ +60 dB |
 | SOFT CLIP | `0..1` `AudioDistortion` amount, `.apo`-style saturation before the limiter |
 | CLIP GUARD | keeps `AudioLimiter` in the chain (`MaxLevel -0.5 dB`) |
 | MONITOR | wires/unwires `AudioDeviceOutput` |
 | MUTE MIC | writes `AudioDeviceInput.Muted` — also silences the monitor |
+| BRIDGE | POSTs the curve to `eq-bridge.mjs` (desktop only) |
 | preset | ◀ ▶ cycle, `RESET`, or click the name |
+| `–` | collapse the panel to its title bar (phones) |
+| `?` | full diagnostics to the console, same as `RobloxEQ.diagnostics()` |
 | level meter | the thin green bar at the bottom of the graph is live `AudioAnalyzer.RmsLevel` at 30 Hz — if it never moves, there is no mic stream and nothing downstream will help |
 
 Presets: Loud + Clear, Broadcast, Deep Radio, Clarity Max, Warm Bass Voice, Loudest Natty.
@@ -188,10 +211,15 @@ Presets: Loud + Clear, Broadcast, Deep Radio, Clarity Max, Warm Bass Voice, Loud
 RobloxEQ.preset("Broadcast")
 RobloxEQ.set("bass", 6)
 RobloxEQ.preamp(12)
+RobloxEQ.transmit(6)        -- AudioDeviceInput.Volume, clamped to 0..3
 RobloxEQ.boost("1k")
 RobloxEQ.toggle("monitor")
-RobloxEQ.status()   --> { graph = true, micCreated = false, wires = 11, state = {...} }
-RobloxEQ.destroy()
+RobloxEQ.refresh()          -- re-read the mic device and rebuild the wires
+RobloxEQ.status()           --> { graph = true, micActive = true, wires = 11, gainDb = 12.0, ... }
+RobloxEQ.diagnostics()      -- the same report the ? button prints
+RobloxEQ.bridgeHost("192.168.1.20:7331")
+RobloxEQ.collapse(true)
+RobloxEQ.destroy()          -- also puts the device volume back
 ```
 
 Settings persist to `RobloxEQ.json` in the executor workspace (`writefile`/`readfile`, guarded
@@ -207,7 +235,10 @@ games: `AudioDeviceInput.Active` is set by Roblox core scripts only.
 
 ### Limits, stated plainly
 
-* **Local monitor only.** Other players get the OS mic device, unprocessed.
+* **Local monitor only.** Other players get the OS mic device, unprocessed. `XFER` writes
+`AudioDeviceInput.Volume`, the one stream gain that exists (0..3 = +9.5 dB), but it is set on the
+client: the engine docs say device properties should be assigned from the server to replicate,
+so treat it as best effort rather than a guaranteed boost.
 * Needs the experience's mic permission + `UseAudioApi`; without them there is no stream.
 * 3 shelf bands per `AudioEqualizer`, not parametric biquads, so the curve is a series of
   shelves rather than the browser extension's `BiquadFilterNode` response. The graph widget

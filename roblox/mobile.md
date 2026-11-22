@@ -5,6 +5,17 @@ feature — Roblox hands the Opus encoder whatever the OS gives it, and a Luau s
 that point. So the EQ has to happen **before the OS hands the mic to Roblox**. That is possible,
 it just isn't a Roblox script. This page is the ladder of things that actually do it.
 
+## The panel on a phone
+
+`RobloxEQ.lua` runs on Android executors too, and v1.1 makes it fit: the panel scales to the
+viewport, re-fits when the device rotates, is clamped to the screen while you drag it, tracks your
+finger 1:1 under `UIScale`, collapses to its title bar with `–`, and sizes its status box from the
+lines it actually prints. The level meter is live if the experience has opened your mic.
+
+What it still cannot do on a phone is change what other players hear. The `XFER` slider writes
+`AudioDeviceInput.Volume` (the only stream gain a script has, up to +9.5 dB); it is set on the
+client, so expect it to be best effort. For a real transmit EQ use the routes below.
+
 ## The verdict, per platform
 
 | Where you play | Can your transmit voice be EQ'd? | How |

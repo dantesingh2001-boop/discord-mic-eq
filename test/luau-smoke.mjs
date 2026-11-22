@@ -160,8 +160,61 @@ for _, line in ipairs(OUT) do
 end
 check("no errors in the update loops", spawnErrors == 0, spawnErrors)
 
+-- transmit gain: AudioDeviceInput.Volume 0..3 is the only stream gain a script has
+local device = TEST_PLAYER:FindFirstChildOfClass("AudioDeviceInput")
+eq.transmit(9.54)
+check("transmit +9.5 dB reaches AudioDeviceInput.Volume 3", math.abs(device.Volume - 3) < 0.01, device.Volume)
+check("status reports the applied device volume", math.abs(eq.status().transmitVol - 3) < 0.01,
+	eq.status().transmitVol)
+eq.transmit(-999)
+check("transmit floor clamps to -24 dB", math.abs(device.Volume - 0.0631) < 0.002, device.Volume)
+eq.transmit(0)
+check("transmit 0 dB = unity device volume", math.abs(device.Volume - 1) < 1e-6, device.Volume)
+
+-- the chain gain readout must be what the faders accepted, not what we asked for
+eq.preset("Loudest Natty")
+local reported = eq.status().gainDb
+local measured = faderDb()
+check("status gainDb matches the faders", math.abs(reported - measured) < 0.05, reported .. " vs " .. measured)
+
+-- a device that appears after start-up is adopted instead of monitored forever as dead air
+check("engine mic adopted at build", eq.status().micCreated == false)
+local late = Instance.new("AudioDeviceInput")
+late.Volume = 0.5
+late.Parent = TEST_PLAYER
+device:Destroy()
+eq.refresh()
+local adopted = false
+for _, w in ipairs(alive("Wire")) do
+	if w.SourceInstance == late then
+		adopted = true
+	end
+end
+check("late engine mic adopted on refresh", adopted, eq.status().wires)
+check("wires still complete after the swap", #alive("Wire") == 12, #alive("Wire"))
+
+-- panel geometry is derived, so rows cannot be clipped by a fixed total
+local mainFrame, statusFrame
+for _, inst in ipairs(ALL) do
+	if inst.ClassName == "Frame" and inst.Name == "Main" and inst.Destroyed == nil then
+		mainFrame = inst
+	end
+	if inst.ClassName == "Frame" and inst.LayoutOrder == 8 and inst.Destroyed == nil then
+		statusFrame = inst
+	end
+end
+check("panel height derived from the rows", mainFrame and mainFrame.Size.Y.Offset == 540,
+	mainFrame and mainFrame.Size.Y.Offset)
+check("status box tall enough for its lines", statusFrame and statusFrame.Size.Y.Offset >= 88,
+	statusFrame and statusFrame.Size.Y.Offset)
+
+eq.transmit(6)
+local beforeTeardown = late.Volume
+
 -- teardown
 eq.destroy()
+check("destroy restores the device volume the script changed", math.abs(late.Volume - 0.5) < 1e-6,
+	beforeTeardown .. " -> " .. tostring(late.Volume))
 local leftover = {}
 for _, inst in ipairs(ALL) do
 	if inst.ClassName == "Wire" and inst.Destroyed == nil then
