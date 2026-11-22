@@ -211,6 +211,48 @@ check("status box tall enough for its lines", statusFrame and statusFrame.Size.Y
 eq.transmit(6)
 local beforeTeardown = late.Volume
 
+-- panel geometry, measured on the instances the script actually built:
+-- every row must stack inside the body, and every row child must fit its width
+local PANEL_W, TITLE_H, BODY_TOP, ROW_PAD = 384, 30, 36, 6
+local bodyFrame
+for _, inst in ipairs(ALL) do
+	if inst.ClassName == "Frame" and inst.Destroyed == nil and inst.Size and inst.Size.Y
+		and inst.Size.X.Offset == -20 and inst.Size.Y.Offset == -40 then
+		bodyFrame = bodyFrame or inst
+	end
+end
+check("body container found", bodyFrame ~= nil)
+local bodyH = 540 * bodyFrame.Size.Y.Scale + bodyFrame.Size.Y.Offset
+local rows = {}
+for _, inst in ipairs(ALL) do
+	if inst.Destroyed == nil and inst.LayoutOrder and inst.Size and inst.Size.Y.Scale == 0
+		and inst.Parent == bodyFrame then
+		rows[#rows + 1] = inst
+	end
+end
+table.sort(rows, function(a, b) return a.LayoutOrder < b.LayoutOrder end)
+local stack = 0
+for _, row in ipairs(rows) do
+	stack = stack + row.Size.Y.Offset
+end
+stack = stack + ROW_PAD * (#rows - 1)
+check("all 9 rows stacked inside the body", #rows == 9 and stack <= bodyH, stack .. " of " .. bodyH)
+
+local overflow = {}
+for _, row in ipairs(rows) do
+	local rowW = row.Size.X.Scale * PANEL_W + row.Size.X.Offset
+	for _, child in ipairs(row.Children or {}) do
+		if child.Size and child.Size.X and child.Position and child.Position.X then
+			local cw = child.Size.X.Scale * rowW + child.Size.X.Offset
+			local cx = child.Position.X.Scale * rowW + child.Position.X.Offset
+			if cx + cw > rowW + 0.01 then
+				overflow[#overflow + 1] = tostring(row.LayoutOrder) .. ":" .. tostring(child.ClassName)
+			end
+		end
+	end
+end
+check("no row child overflows the panel width", #overflow == 0, table.concat(overflow, ","))
+
 -- teardown
 eq.destroy()
 check("destroy restores the device volume the script changed", math.abs(late.Volume - 0.5) < 1e-6,
